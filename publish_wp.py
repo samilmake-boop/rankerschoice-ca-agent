@@ -1,18 +1,18 @@
 # publish_wp.py
 import os
 import requests
-from datetime import datetime, timezone, timedelta
 
-IST = timezone(timedelta(hours=5, minutes=30))
 WP_URL = "https://ranekrschoice.com/wp-json/wp/v2"
 WP_USER = os.environ["WP_USER"]
 WP_PASS = os.environ["WP_APP_PASSWORD"]
-WP_CATEGORY_ID = int(os.environ.get("WP_CA_CATEGORY_ID", "12"))
+WP_CATEGORY_ID = int(os.environ.get("WP_CA_CATEGORY_ID", "0"))
+
 
 def build_html(items):
+    """Build exam-style HTML grouped by category."""
     cats = ["Punjab", "National", "International", "Appointment", "Scheme",
             "Award", "Sports", "Economy", "SciTech", "Obituary", "Index", "Defence"]
-    
+
     html = '<div class="daily-ca">\n'
     for cat in cats:
         cat_items = [i for i in items if i["category"].lower() == cat.lower()]
@@ -30,17 +30,24 @@ def build_html(items):
     html += '</div>\n<p><em>Auto-curated by RankersChoice AI Agent for competitive exam aspirants.</em></p>'
     return html
 
+
 def publish(items, date_str):
+    """Create a DRAFT post — you publish manually after review."""
     title = f"Daily Current Affairs — {date_str}"
     html = build_html(items)
-    
+
     payload = {
         "title": title,
         "content": html,
-        "status": "publish",
-        "categories": [WP_CATEGORY_ID],
+        "status": "draft",  # ← KEY CHANGE: draft instead of publish
+        "categories": [WP_CATEGORY_ID] if WP_CATEGORY_ID else [],
     }
-    
-    r = requests.post(f"{WP_URL}/posts", json=payload, auth=(WP_USER, WP_PASS), timeout=30)
+
+    r = requests.post(
+        f"{WP_URL}/posts",
+        json=payload,
+        auth=(WP_USER, WP_PASS),
+        timeout=30,
+    )
     r.raise_for_status()
     return r.json()
