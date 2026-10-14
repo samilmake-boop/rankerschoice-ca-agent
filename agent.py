@@ -71,12 +71,14 @@ def run():
     date_str = datetime.now().strftime("%d %B %Y")
     log(f"\n📤 Publishing to WordPress...")
     
-    try:
+        try:
         result = publish(approved, date_str)
-        post_url = result.get("link", "pending")
-        log(f"  ✅ Published! Post ID: {result.get('id')}")
-        log(f"  🔗 URL: {post_url}")
-        log(f"\n🎉 SUCCESS! Daily Current Affairs for {date_str} is live on ranekrschoice.com")
+        post_id = result.get("id")
+        edit_url = f"https://ranekrschoice.com/wp-admin/post.php?post={post_id}&action=edit"
+        log(f"  ✅ Draft created! Post ID: {post_id}")
+        log(f"  ✏️ Edit URL: {edit_url}")
+        log(f"\n🎉 SUCCESS! Draft for {date_str} is ready for your review.")
+        log(f"📖 Review and click 'Publish' in WordPress admin when ready.")
     except Exception as e:
         log(f"❌ Publishing failed: {e}")
         sys.exit(1)
