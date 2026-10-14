@@ -1,31 +1,36 @@
 # llm_client.py
+# 100% FREE LLM via OpenRouter — no credit card needed
+# Uses Llama 3.3 70B (free tier) with automatic fallback to other free models
+
 import os
 import requests
-import json
 import time
 
-GROQ_API_KEY = os.environ["GROQ_API_KEY"]
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+OPENROUTER_API_KEY = os.environ["GROQ_API_KEY"]  # reuse the same secret name
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# Try these models in order — first one that works will be used
-GROQ_MODELS = [
-    "llama-3.3-70b-versatile",        # current flagship (try first)
-    "llama-3.1-8b-instant",           # older, might still work
-    "llama-3.1-70b-versatile",        # older 70B
-    "gemma2-9b-it",                   # Google's Gemma 2
-    "mixtral-8x7b-32768",             # Mixtral fallback
+# Free models — try in priority order (best first)
+FREE_MODELS = [
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "qwen/qwen-2.5-72b-instruct:free",
+    "mistralai/mistral-small-24b-instruct-2501:free",
+    "meta-llama/llama-3.1-8b-instruct:free",
+    "google/gemini-flash-1.5:free",
+    "deepseek/deepseek-r1:free",
 ]
 
 
 def chat(system_prompt, user_input, temperature=0.3, json_mode=False, retries=2):
-    """Call Groq with automatic model fallback."""
+    """Call OpenRouter with auto-fallback across free models."""
     headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
+        "HTTP-Referer": "https://ranekrschoice.com",
+        "X-Title": "RankersChoice CA Agent",
     }
 
     last_error = None
-    for model in GROQ_MODELS:
+    for model in FREE_MODELS:
         payload = {
             "model": model,
             "messages": [
@@ -40,60 +45,68 @@ def chat(system_prompt, user_input, temperature=0.3, json_mode=False, retries=2)
 
         for attempt in range(retries):
             try:
-                r = requests.post(GROQ_URL, headers=headers, json=payload, timeout=60)
+                r = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=90)
 
                 if r.status_code == 429:
-                    # Rate limit — wait and retry
-                    print(f"     (rate limit, waiting 30s...)")
-                    time.sleep(30)
-                    continue
-
-                if r.status_code == 404:
-                    # Model not found — try next model
-                    print(f"     [model '{model}' not found, trying next...]")
-                    last_error = f"Model {model} not found"
-                    break
+                    # Free model rate-limited — wait briefly then try next model
+                    print(f"     [rate limited on {model.split('/')[-1]}, trying next...]")
+                    break  # break inner loop, try next model
 
                 if r.status_code != 200:
-                    # Other error — show real message
                     try:
                         err_body = r.json()
                         err_msg = err_body.get("error", {}).get("message", r.text[:200])
                     except Exception:
                         err_msg = r.text[:200]
-                    print(f"     [HTTP {r.status_code}: {err_msg}]")
+                    print(f"     [{model.split('/')[-1]}: HTTP {r.status_code}]")
                     last_error = f"HTTP {r.status_code}: {err_msg}"
-                    break
+                    break  # try next model
 
                 # Success!
                 return r.json()["choices"][0]["message"]["content"]
 
             except requests.exceptions.Timeout:
-                print(f"     [timeout, retry {attempt+1}/{retries}...]")
+                print(f"     [timeout on {model.split('/')[-1]}, retry {attempt+1}/{retries}...]")
                 time.sleep(5)
                 continue
             except Exception as e:
-                print(f"     [exception: {e}]")
+                print(f"     [exception on {model.split('/')[-1]}: {e}]")
                 last_error = str(e)
-                break
+                break  # try next model
 
-    raise Exception(f"All Groq models failed. Last error: {last_error}")
+    raise Exception(f"All free models failed. Last error: {last_error}")
 
 
 def test_connection():
-    """Quick test to verify the API key works."""
-    print("Testing Groq API...")
-    try:
-        result = chat(
-            "You are a test assistant.",
-            "Reply with: OK",
-            temperature=0,
-        )
-        print(f"✅ Groq works! Response: {result[:50]}")
-        return True
-    except Exception as e:
-        print(f"❌ Groq failed: {e}")
-        return False
+    """Test OpenRouter API connection."""
+    print("=" * 50)
+    print("OPENROUTER API CONNECTION TEST")
+    print("Testing all free models...")
+    print("=" * 50)
+    
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "HTTP-Referer": "https://ranekrschoice.com",
+        "X-Title": "RankersChoice CA Agent",
+    }
+    
+    for model in FREE_MODELS:
+        short_name = model.split("/")[-1]
+        print(f"\n  Testing: {short_name}")
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": "Reply with: OK"}],
+            "max_tokens": 10,
+        }
+        try:
+            r = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=30)
+            if r.status_code == 200:
+                resp = r.json()["choices"][0]["message"]["content"]
+                print(f"    ✅ Works! Response: {resp[:30]}")
+            else:
+                print(f"    ❌ HTTP {r.status_code}")
+        except Exception as e:
+            print(f"    ❌ Error: {e}")
 
 
 if __name__ == "__main__":
